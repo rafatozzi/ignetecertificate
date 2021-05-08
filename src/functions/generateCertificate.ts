@@ -3,10 +3,11 @@ import * as fs from "fs";
 
 import format from "date-fns/format";
 
-import Handlebars from "handlebars";
+import * as Handlebars from "handlebars";
 
 import { Handler } from "aws-lambda";
 import chromium from 'chrome-aws-lambda';
+import { S3 } from 'aws-sdk';
 
 import { document } from '../utils/dynamodbClient';
 
@@ -78,10 +79,23 @@ export const handle: Handler = async (event: any) => {
 
   await browser.close();
 
+  const s3 = new S3({
+    region: process.env.REGION || 'us-east-1'
+  });
+
+  await s3.putObject({
+    Bucket: 'ignitecertificate',
+    Key: `${id}.pdf`,
+    ACL: 'public-read',
+    Body: pdf,
+    ContentType: 'application/pdf'
+  }).promise();
+
   return {
     statusCode: 201,
     body: JSON.stringify({
       message: "Certificate Created",
+      url: `https://ignitecertificate.s3-sa-east-1.amazonaws.com/${id}.pdf`
     }),
     headers: {
       "Content-Type": "application/json"
