@@ -1,11 +1,12 @@
 import * as path from "path";
 import * as fs from "fs";
 
+import { Handler } from "aws-lambda";
+
 import format from "date-fns/format";
 
 import * as Handlebars from "handlebars";
 
-import { Handler } from "aws-lambda";
 import chromium from 'chrome-aws-lambda';
 import { S3 } from 'aws-sdk';
 
@@ -36,14 +37,26 @@ const compile = async function (data: ITemplate) {
 export const handle: Handler = async (event: any) => {
   const { id, name, grade } = JSON.parse(event.body) as ICreateCertificate;
 
-  await document.put({
+  const response = await document.query({
     TableName: "users_certificates",
-    Item: {
-      id,
-      name,
-      grade
+    KeyConditionExpression: "id = :id",
+    ExpressionAttributeValues: {
+      ":id": id
     }
   }).promise();
+
+  const userAlreadyExists = response.Items[0];
+
+  if (!userAlreadyExists) {
+    await document.put({
+      TableName: "users_certificates",
+      Item: {
+        id,
+        name,
+        grade
+      }
+    }).promise();
+  }
 
   //Gerando o certificado
   const medaPath = path.join(process.cwd(), 'src', 'templates', 'selo.png');
@@ -84,7 +97,7 @@ export const handle: Handler = async (event: any) => {
   });
 
   await s3.putObject({
-    Bucket: 'ignitecertificate',
+    Bucket: process.env.BUCKET || 'ignitecertificatebucket',
     Key: `${id}.pdf`,
     ACL: 'public-read',
     Body: pdf,
@@ -95,7 +108,7 @@ export const handle: Handler = async (event: any) => {
     statusCode: 201,
     body: JSON.stringify({
       message: "Certificate Created",
-      url: `https://ignitecertificate.s3-sa-east-1.amazonaws.com/${id}.pdf`
+      url: `https://ignitecertificatebucket.s3.amazonaws.com/${id}.pdf`
     }),
     headers: {
       "Content-Type": "application/json"
